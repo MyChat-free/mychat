@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { ROLES } from "@/lib/roles";
 
@@ -11,9 +11,38 @@ type Message = {
   content: string;
 };
 
+const ROLE_ORDER = ["talk", "finance", "wellness", "planner"] as const;
+
+const ROLE_BUTTONS = [
+  { id: "talk", label: "💬 Поговорить" },
+  { id: "finance", label: "💰 Деньги" },
+  { id: "planner", label: "📋 План" },
+  { id: "wellness", label: "🌿 Самочувствие" },
+] as const;
+
+function getInitialMessage(roleId: string) {
+  if (roleId === "talk") {
+    return "Привет 🙂 Я твой AI-помощник. Я могу поддержать, помочь с деньгами, разложить задачи и помочь с привычками. Как проходит твой день?";
+  }
+
+  if (roleId === "finance") {
+    return "Привет 💰 Давай спокойно разберёмся с деньгами. Что сейчас больше всего волнует: доход, траты, накопления или инвестиции?";
+  }
+
+  if (roleId === "planner") {
+    return "Привет 📋 Давай разложим всё по полочкам. Что сейчас больше всего грузит: задачи, дедлайны или общий хаос?";
+  }
+
+  if (roleId === "wellness") {
+    return "Привет 🌿 Давай посмотрим, как ты себя чувствуешь. Что сейчас больше всего беспокоит: усталость, сон, энергия или привычки?";
+  }
+
+  return "Привет 🙂 Как ты сегодня?";
+}
+
 export default function RoleChatPage() {
   const params = useParams<{ roleId: string }>();
-  const roleId = params?.roleId; // берем из URL: /chat/talk -> roleId="talk"
+  const roleId = params?.roleId;
 
   const role = useMemo(() => {
     if (!roleId) return null;
@@ -23,6 +52,22 @@ export default function RoleChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!roleId) return;
+
+    setMessages([
+      {
+        role: "assistant",
+        content: getInitialMessage(roleId),
+      },
+    ]);
+  }, [roleId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isThinking]);
 
   async function handleSend() {
     const text = input.trim();
@@ -39,7 +84,6 @@ export default function RoleChatPage() {
         body: JSON.stringify({
           roleId: role.id,
           message: text,
-          history: messages,
         }),
       });
 
@@ -47,7 +91,7 @@ export default function RoleChatPage() {
       const reply = data?.reply ?? "Пустой ответ.";
 
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-    } catch (e) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "Ошибка сети/сервера. Попробуй ещё раз." },
@@ -56,6 +100,8 @@ export default function RoleChatPage() {
       setIsThinking(false);
     }
   }
+
+  const showRoleButtons = messages.length === 1 && messages[0]?.role === "assistant";
 
   if (!role) {
     return (
@@ -70,47 +116,258 @@ export default function RoleChatPage() {
   }
 
   return (
-    <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 720, margin: "0 auto" }}>
-      <a href="/" style={{ display: "inline-block", marginBottom: 16 }}>
-        ← Назад
-      </a>
+    <main
+      style={{
+        minHeight: "100dvh",
+        background: "#fff",
+        fontFamily: "system-ui",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <header
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+          background: "#fff",
+          borderBottom: "1px solid #eee",
+          padding: "14px 16px",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 720,
+            margin: "0 auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <a href="/" style={{ textDecoration: "none", color: "#111", fontSize: 14 }}>
+            ← Назад
+          </a>
 
-      <h1 style={{ fontSize: 28, fontWeight: 800 }}>{role.title}</h1>
-      <p style={{ marginTop: 8, opacity: 0.8 }}>{role.description}</p>
+          <div style={{ textAlign: "center", flex: 1 }}>
+            <div style={{ fontSize: 18, fontWeight: 800 }}>{role.title}</div>
+            <div style={{ fontSize: 12, opacity: 0.65 }}>{role.description}</div>
+          </div>
 
-      <div style={{ marginTop: 20, display: "grid", gap: 12 }}>
-        {messages.map((m, idx) => (
+          <a href="/" style={{ textDecoration: "none", color: "#111", fontSize: 14 }}>
+            ⋯
+          </a>
+        </div>
+      </header>
+
+      <section
+        style={{
+          flex: 1,
+          width: "100%",
+          maxWidth: 720,
+          margin: "0 auto",
+          padding: "16px 16px 120px",
+          display: "grid",
+          gap: 12,
+        }}
+      >
+        {messages.map((m, idx) => {
+          const isAssistant = m.role === "assistant";
+
+          return (
+            <div key={idx}>
+              <div
+                style={{
+                  padding: 14,
+                  borderRadius: 16,
+                  border: "1px solid #e8e8e8",
+                  background: isAssistant ? "#fafafa" : "#fff",
+                  maxWidth: "88%",
+                  marginLeft: isAssistant ? 0 : "auto",
+                }}
+              >
+                <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 6 }}>
+                  {isAssistant ? role.title : "Вы"}
+                </div>
+
+                <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.content}</div>
+              </div>
+
+              {idx === 0 && showRoleButtons && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginTop: 12,
+                  }}
+                >
+                  {ROLE_BUTTONS.map((item) => (
+                    <a
+                      key={item.id}
+                      href={`/chat/${item.id}`}
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 999,
+                        border: "1px solid #ddd",
+                        background: item.id === role.id ? "#111" : "#fff",
+                        color: item.id === role.id ? "#fff" : "#111",
+                        textDecoration: "none",
+                        fontSize: 14,
+                      }}
+                    >
+                      {item.label}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {isThinking && (
           <div
-            key={idx}
             style={{
+              padding: 14,
+              borderRadius: 16,
+              border: "1px solid #e8e8e8",
+              background: "#fafafa",
+              maxWidth: "88%",
+            }}
+          >
+            <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 6 }}>{role.title}</div>
+            <div>Печатает...</div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </section>
+
+      <div
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 64,
+          background: "#fff",
+          borderTop: "1px solid #eee",
+          padding: 12,
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 720,
+            margin: "0 auto",
+            display: "flex",
+            gap: 10,
+          }}
+        >
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Напиши сообщение..."
+            style={{
+              flex: 1,
               padding: 12,
               borderRadius: 12,
               border: "1px solid #ddd",
-              background: m.role === "user" ? "#fff" : "#fafafa",
+              fontSize: 16,
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSend();
+            }}
+          />
+          <button
+            onClick={handleSend}
+            disabled={isThinking}
+            style={{
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: "1px solid #111",
+              background: "#111",
+              color: "#fff",
+              fontSize: 14,
             }}
           >
-            <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 6 }}>
-              {m.role === "user" ? "Вы" : "Бот"}
-            </div>
-            <div>{m.content}</div>
-          </div>
-        ))}
+            {isThinking ? "..." : "➤"}
+          </button>
+        </div>
       </div>
 
-      <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Напиши сообщение..."
-          style={{ flex: 1, padding: 10 }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleSend();
+      <nav
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "#fff",
+          borderTop: "1px solid #ddd",
+          padding: "8px 10px calc(8px + env(safe-area-inset-bottom))",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 720,
+            margin: "0 auto",
+            display: "grid",
+            gridTemplateColumns: "repeat(5, 1fr)",
+            gap: 8,
+            textAlign: "center",
           }}
-        />
-        <button onClick={handleSend} disabled={isThinking} style={{ padding: "10px 14px" }}>
-          {isThinking ? "..." : "Отправить"}
-        </button>
-      </div>
+        >
+          {ROLE_ORDER.map((id) => {
+            const item = ROLES[id];
+            const isActive = item.id === role.id;
+
+            const icon =
+              id === "talk"
+                ? "💬"
+                : id === "finance"
+                ? "💰"
+                : id === "wellness"
+                ? "🌿"
+                : "📋";
+
+            const label =
+              id === "talk"
+                ? "Чат"
+                : id === "finance"
+                ? "Деньги"
+                : id === "wellness"
+                ? "Велнес"
+                : "План";
+
+            return (
+              <a
+                key={id}
+                href={item.path}
+                style={{
+                  textDecoration: "none",
+                  color: isActive ? "#111" : "#666",
+                  fontSize: 12,
+                  fontWeight: isActive ? 700 : 500,
+                }}
+              >
+                <div style={{ fontSize: 18, marginBottom: 4 }}>{icon}</div>
+                <div>{label}</div>
+              </a>
+            );
+          })}
+
+          <a
+            href="/"
+            style={{
+              textDecoration: "none",
+              color: "#666",
+              fontSize: 12,
+              fontWeight: 500,
+            }}
+          >
+            <div style={{ fontSize: 18, marginBottom: 4 }}>⋯</div>
+            <div>Меню</div>
+          </a>
+        </div>
+      </nav>
     </main>
   );
 }
