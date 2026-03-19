@@ -17,7 +17,6 @@ export type RoleSession = {
 
 type SharedMemoryItem = {
   roleId: string;
-  role: ChatRole;
   content: string;
   ts: number;
 };
@@ -30,9 +29,8 @@ type UserState = {
 
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 минут
 const ROLE_HISTORY_MAX = 20;
-const SHARED_FEED_MAX = 40;
+const SHARED_FEED_MAX = 20;
 
-// Глобальный объект на сервере
 const store: Record<string, UserState> = {};
 
 function ensureUser(userId: string): UserState {
@@ -96,15 +94,17 @@ export function appendToRoleHistory(params: {
     session.messages = session.messages.slice(-ROLE_HISTORY_MAX);
   }
 
-  user.sharedFeed.push({
-    roleId: params.roleId,
-    role: params.role,
-    content: params.content,
-    ts: now,
-  });
+  // В общую память между ролями кладём ТОЛЬКО сообщения пользователя
+  if (params.role === "user") {
+    user.sharedFeed.push({
+      roleId: params.roleId,
+      content: params.content,
+      ts: now,
+    });
 
-  if (user.sharedFeed.length > SHARED_FEED_MAX) {
-    user.sharedFeed = user.sharedFeed.slice(-SHARED_FEED_MAX);
+    if (user.sharedFeed.length > SHARED_FEED_MAX) {
+      user.sharedFeed = user.sharedFeed.slice(-SHARED_FEED_MAX);
+    }
   }
 }
 
@@ -116,7 +116,7 @@ export function getCrossRoleContext(params: {
   const user = ensureUser(params.userId);
   applySessionTimeout(user);
 
-  const limit = params.limit ?? 8;
+  const limit = params.limit ?? 6;
 
   const items = user.sharedFeed
     .filter((item) => item.roleId !== params.currentRoleId)
@@ -125,10 +125,7 @@ export function getCrossRoleContext(params: {
   if (!items.length) return "";
 
   return items
-    .map((item) => {
-      const speaker = item.role === "user" ? "Пользователь" : "AI";
-      return `[${item.roleId}] ${speaker}: ${item.content}`;
-    })
+    .map((item) => `[${item.roleId}] Пользователь: ${item.content}`)
     .join("\n");
 }
 
