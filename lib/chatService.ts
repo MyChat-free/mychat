@@ -3,10 +3,8 @@ import { ROLES } from "@/lib/roles";
 import { PROMPTS } from "@/lib/prompts";
 import {
   appendToRoleHistory,
-  compactRoleHistory,
+  getCrossRoleContext,
   getRoleHistory,
-  getRoleSummary,
-  setRoleSummary,
 } from "@/lib/memoryStore";
 import OpenAI from "openai";
 
@@ -52,10 +50,7 @@ function buildDefaultSystemPrompt(title: string) {
     `Ты — ${title}. ` +
     "ЦА: женщины 25–40, доход 100+, хотят порядок в жизни и финансах. " +
     "Стиль: тепло, уверенно, по делу, без морализаторства. " +
-    "Отвечай компактно, максимум в 3 смысловых блоках. " +
-    "Если ответ не помещается — сокращай, но обязательно заканчивай мысль. " +
-    "Никогда не обрывай предложение на полуслове. " +
-    "Лучше ответить короче, но законченно. " +
+    "Отвечай компактно и законченно. " +
     "Если запрос про здоровье/психику — мягко рекомендуй специалиста и безопасные общие рекомендации."
   );
 }
@@ -69,13 +64,6 @@ function getMaxTokensByRole(roleId: string) {
   };
 
   return maxTokensByRole[roleId] ?? 220;
-}
-
-function toChatMessages(history: { role: ChatRole; content: string }[]) {
-  return history.map((m) => ({
-    role: m.role,
-    content: String(m.content ?? ""),
-  }));
 }
 
 function trimIncompleteReply(text: string) {
@@ -106,70 +94,6 @@ function trimIncompleteReply(text: string) {
   return clean;
 }
 
-/**
- * Если история стала длинной — обновляем summary и режем старые сообщения.
- */
-async function compressIfNeeded(params: {
-  client: OpenAI;
-  model: string;
-  userId: string;
-  roleId: string;
-  systemPrompt: string;
-}) {
-  const KEEP_LAST = 12;
-  const TRIGGER_LEN = 18;
-
-  const history = getRoleHistory({ userId: params.userId, roleId: params.roleId });
-  if (history.length < TRIGGER_LEN) return;
-
-  const summary = getRoleSummary({ userId: params.userId, roleId: params.roleId });
-
-  const cutIndex = Math.max(0, history.length - KEEP_LAST);
-  const older = history.slice(0, cutIndex);
-
-  if (older.length < 6) return;
-
-  const olderMsgs = toChatMessages(
-    older.map((m) => ({ role: m.role as ChatRole, content: m.content }))
-  );
-
-  const summarizerSystem =
-    "Ты кратко сжимаешь историю диалога в summary.\n" +
-    "Сделай новое summary на русском языке, 5–8 строк максимум.\n" +
-    "Сохраняй: факты о пользователе, цели, числа, ограничения, решения и договорённости.\n" +
-    "Не добавляй выдуманных фактов.\n" +
-    "Пиши коротко и по делу.";
-
-  const summarizerInput = [
-    {
-      role: "system" as const,
-      content: summarizerSystem,
-    },
-    {
-      role: "user" as const,
-      content:
-        `Текущее summary:\n${summary || "(пусто)"}\n\n` +
-        `Старая часть переписки для сжатия:\n` +
-        olderMsgs.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n"),
-    },
-  ];
-
-  const res = await params.client.chat.completions.create({
-    model: params.model,
-    messages: summarizerInput as any,
-    temperature: 0.2,
-    max_tokens: 180,
-    presence_penalty: 0,
-    frequency_penalty: 0,
-  });
-
-  const newSummary = res.choices?.[0]?.message?.content?.trim();
-  if (!newSummary) return;
-
-  setRoleSummary({ userId: params.userId, roleId: params.roleId, summary: newSummary });
-  compactRoleHistory({ userId: params.userId, roleId: params.roleId, keepLast: KEEP_LAST });
-}
-
 export async function chatReply(params: {
   userId: string;
   roleId: string;
@@ -178,6 +102,7 @@ export async function chatReply(params: {
   const role = ROLES[params.roleId as keyof typeof ROLES];
   const title = role?.title ?? params.roleId;
 
+  // 1) сохраняем сообщение пользователя в память роли + общую память
   appendToRoleHistory({
     userId: params.userId,
     roleId: params.roleId,
@@ -185,20 +110,37 @@ export async function chatReply(params: {
     content: params.message,
   });
 
+  const roleHistory = getRoleHistory({
+    userId: params.userId,
+    roleId: params.roleId,
+  });
+
+  const crossRoleContext = getCrossRoleContext({
+    userId: params.userId,
+    currentRoleId: params.roleId,
+    limit: 8,
+  });
+
+  const messages = roleHistory.map((m) => ({
+    role: m.role as ChatRole,
+    content: String(m.content ?? ""),
+  }));
+
   const promptId = (role as any)?.promptId as keyof typeof PROMPTS | undefined;
   const rolePrompt =
     promptId && PROMPTS[promptId] ? String(PROMPTS[promptId]).trim() : "";
 
-    const compactReplyRule =
-"\n\nВАЖНО ДЛЯ ФОРМАТА ОТВЕТА:\n" +
-"- Отвечай компактно.\n" +
-"- Максимум 3 смысловых блока.\n" +
-"- Если ответ не помещается, сократи его, но заверши мысль.\n" +
-"- Никогда не обрывай предложение на полуслове.\n" +
-"- Лучше меньше, но законченно.\n";
+  const compactReplyRule =
+    "\n\nВАЖНО ДЛЯ ФОРМАТА ОТВЕТА:\n" +
+    "- Отвечай компактно.\n" +
+    "- Максимум 3 смысловых блока.\n" +
+    "- Если ответ не помещается, сократи его, но заверши мысль.\n" +
+    "- Никогда не обрывай предложение на полуслове.\n" +
+    "- Не используй markdown-разметку вроде ** и ###.\n" +
+    "- Лучше меньше, но законченно.\n";
 
-
-  const systemPrompt = (rolePrompt || buildDefaultSystemPrompt(title)) + compactReplyRule;
+  const systemPrompt =
+    (rolePrompt || buildDefaultSystemPrompt(title)) + compactReplyRule;
 
   const providerOrder = getProviderOrder();
   const maxTokens = getMaxTokensByRole(params.roleId);
@@ -210,28 +152,14 @@ export async function chatReply(params: {
       const client = createClient(provider);
       const model = getModel(provider);
 
-      await compressIfNeeded({
-        client,
-        model,
-        userId: params.userId,
-        roleId: params.roleId,
-        systemPrompt,
-      });
-
-      const summary = getRoleSummary({ userId: params.userId, roleId: params.roleId });
-      const history = getRoleHistory({ userId: params.userId, roleId: params.roleId });
-
-      const messages = toChatMessages(
-        history.map((m) => ({ role: m.role as ChatRole, content: m.content }))
-      );
-
       const finalMessages: any[] = [{ role: "system", content: systemPrompt }];
 
-      if (summary) {
+      if (crossRoleContext) {
         finalMessages.push({
           role: "system",
           content:
-            "Краткое резюме предыдущих сообщений. Используй как контекст:\n" + summary,
+            "Контекст из других ролей этого же пользователя. Используй осторожно как дополнительную память, не цитируй дословно без необходимости:\n" +
+            crossRoleContext,
         });
       }
 
@@ -248,15 +176,12 @@ export async function chatReply(params: {
               role: "system",
               content:
                 systemPrompt +
-                "\n\nСначала сделай внутренний краткий анализ и план ответа. Не обращайся к пользователю. Пиши только черновую логику.",
+                "\n\nСначала сделай внутренний краткий анализ запроса и план ответа. Не обращайся к пользователю. Не используй markdown.",
             },
-            ...finalMessages.filter((m) => m.role !== "system").map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
+            ...finalMessages.filter((m) => m.role !== "system"),
           ] as any,
           temperature: 0.4,
-          max_tokens: 180,
+          max_tokens: 160,
           presence_penalty: 0,
           frequency_penalty: 0,
         });
@@ -268,7 +193,9 @@ export async function chatReply(params: {
             ...finalMessages.filter((m) => m.role !== "system"),
             {
               role: "assistant",
-              content: "Черновой анализ:\n" + (reasoning.choices?.[0]?.message?.content ?? ""),
+              content:
+                "Черновой анализ:\n" +
+                (reasoning.choices?.[0]?.message?.content ?? ""),
             },
           ] as any,
           temperature: 0.7,
@@ -294,6 +221,7 @@ export async function chatReply(params: {
         reply = trimIncompleteReply(reply);
       }
 
+      // 2) сохраняем ответ ассистента в память роли + общую память
       appendToRoleHistory({
         userId: params.userId,
         roleId: params.roleId,

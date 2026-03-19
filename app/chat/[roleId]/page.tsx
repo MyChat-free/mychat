@@ -50,6 +50,21 @@ export default function RoleChatPage() {
   }, [roleId]);
 
   const [messages, setMessages] = useState<Message[]>([]);
+  import { useEffect } from "react";
+  useEffect(() => {
+    if (!role) return;
+  
+    // если это первая загрузка — добавляем приветствие
+    setMessages([
+      {
+        role: "assistant",
+        content:
+          role.id === "talk"
+            ? "Привет! Ну ты как сегодня?"
+            : `Привет! Я — ${role.title}. Чем могу помочь?`,
+      },
+    ]);
+  }, [role]);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
