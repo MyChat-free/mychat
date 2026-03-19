@@ -40,6 +40,20 @@ function getInitialMessage(roleId: string) {
   return "Привет 🙂 Как ты сегодня?";
 }
 
+function getOrCreateUserId() {
+  if (typeof window === "undefined") return "demo";
+
+  const storageKey = "mychat_user_id_v2";
+  const existing = window.localStorage.getItem(storageKey);
+  if (existing) return existing;
+
+  const newId =
+    "user_" + Math.random().toString(36).slice(2) + "_" + Date.now().toString(36);
+
+  window.localStorage.setItem(storageKey, newId);
+  return newId;
+}
+
 export default function RoleChatPage() {
   const params = useParams<{ roleId: string }>();
   const roleId = params?.roleId;
@@ -50,24 +64,15 @@ export default function RoleChatPage() {
   }, [roleId]);
 
   const [messages, setMessages] = useState<Message[]>([]);
-  import { useEffect } from "react";
-  useEffect(() => {
-    if (!role) return;
-  
-    // если это первая загрузка — добавляем приветствие
-    setMessages([
-      {
-        role: "assistant",
-        content:
-          role.id === "talk"
-            ? "Привет! Ну ты как сегодня?"
-            : `Привет! Я — ${role.title}. Чем могу помочь?`,
-      },
-    ]);
-  }, [role]);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const [userId, setUserId] = useState("demo");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const id = getOrCreateUserId();
+    setUserId(id);
+  }, []);
 
   useEffect(() => {
     if (!roleId) return;
@@ -97,6 +102,7 @@ export default function RoleChatPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          userId,
           roleId: role.id,
           message: text,
         }),
@@ -116,7 +122,8 @@ export default function RoleChatPage() {
     }
   }
 
-  const showRoleButtons = messages.length === 1 && messages[0]?.role === "assistant";
+  const showRoleButtons =
+    messages.length === 1 && messages[0]?.role === "assistant";
 
   if (!role) {
     return (
@@ -250,7 +257,9 @@ export default function RoleChatPage() {
               maxWidth: "88%",
             }}
           >
-            <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 6 }}>{role.title}</div>
+            <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 6 }}>
+              {role.title}
+            </div>
             <div>Печатает...</div>
           </div>
         )}
