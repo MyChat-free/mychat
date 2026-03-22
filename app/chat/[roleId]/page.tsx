@@ -67,6 +67,7 @@ export default function RoleChatPage() {
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [userId, setUserId] = useState("demo");
+  const [isHydrating, setIsHydrating] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -75,15 +76,64 @@ export default function RoleChatPage() {
   }, []);
 
   useEffect(() => {
-    if (!roleId) return;
+    if (!roleId || !userId) return;
 
-    setMessages([
-      {
-        role: "assistant",
-        content: getInitialMessage(roleId),
-      },
-    ]);
-  }, [roleId]);
+    let cancelled = false;
+
+    async function loadHistory() {
+      setIsHydrating(true);
+
+      try {
+        const res = await fetch("/api/chat/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId,
+            roleId,
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error("History request failed");
+        }
+
+        const data = await res.json();
+        const history = Array.isArray(data?.messages) ? data.messages : [];
+
+        if (cancelled) return;
+
+        if (history.length > 0) {
+          setMessages(history);
+        } else {
+          setMessages([
+            {
+              role: "assistant",
+              content: getInitialMessage(roleId),
+            },
+          ]);
+        }
+      } catch {
+        if (cancelled) return;
+
+        setMessages([
+          {
+            role: "assistant",
+            content: getInitialMessage(roleId),
+          },
+        ]);
+      } finally {
+        if (!cancelled) {
+          setIsHydrating(false);
+        }
+      }
+    }
+
+    loadHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [roleId, userId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -91,7 +141,7 @@ export default function RoleChatPage() {
 
   async function handleSend() {
     const text = input.trim();
-    if (!text || !role) return;
+    if (!text || !role || isThinking) return;
 
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setInput("");
@@ -115,7 +165,10 @@ export default function RoleChatPage() {
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Ошибка сети/сервера. Попробуй ещё раз." },
+        {
+          role: "assistant",
+          content: "Ошибка сети/сервера. Попробуй ещё раз.",
+        },
       ]);
     } finally {
       setIsThinking(false);
@@ -123,7 +176,9 @@ export default function RoleChatPage() {
   }
 
   const showRoleButtons =
-    messages.length === 1 && messages[0]?.role === "assistant";
+    !isHydrating &&
+    messages.length === 1 &&
+    messages[0]?.role === "assistant";
 
   if (!role) {
     return (
@@ -212,7 +267,9 @@ export default function RoleChatPage() {
                   {isAssistant ? role.title : "Вы"}
                 </div>
 
-                <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.content}</div>
+                <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>
+                  {m.content}
+                </div>
               </div>
 
               {idx === 0 && showRoleButtons && (
