@@ -139,6 +139,7 @@ export default function RoleChatPage() {
   
     setIsHydrating(false);
   }, [roleId, userId]);
+
   useEffect(() => {
     if (!roleId || !userId) return;
     if (messages.length === 0) return;
@@ -427,7 +428,7 @@ export default function RoleChatPage() {
                 : id === "finance"
                 ? "Деньги"
                 : id === "wellness"
-                ? "Велнес"
+                ? "ЗОЖ"
                 : "План";
 
             return (
