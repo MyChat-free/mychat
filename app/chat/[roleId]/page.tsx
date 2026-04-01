@@ -22,7 +22,7 @@ const ROLE_BUTTONS = [
 
 function getInitialMessage(roleId: string) {
   if (roleId === "talk") {
-    return "Привет 🙂 Я твой AI-помощник. Я могу поддержать, помочь с деньгами, разложить задачи и помочь с привычками. Как проходит твой день?";
+    return "Привет. Ну как ты сегодня? Что у тебя сейчас в голове?";
   }
 
   if (roleId === "finance") {
@@ -39,9 +39,53 @@ function getInitialMessage(roleId: string) {
 
   return "Привет 🙂 Как ты сегодня?";
 }
+const HISTORY_LIMIT = 20;
+
+function getHistoryKey(roleId: string) {
+  return `mychat_history_${roleId}_v1`;
+}
+
+function loadLocalHistory(roleId: string): Message[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = window.localStorage.getItem(getHistoryKey(roleId));
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    const validMessages = parsed.filter(
+      (item: unknown): item is Message =>
+        typeof item === "object" &&
+        item !== null &&
+        "role" in item &&
+        "content" in item &&
+        ((item as Message).role === "user" || (item as Message).role === "assistant") &&
+        typeof (item as Message).content === "string"
+    );
+
+    return validMessages.slice(-HISTORY_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalHistory(roleId: string, messages: Message[]) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      getHistoryKey(roleId),
+      JSON.stringify(messages.slice(-HISTORY_LIMIT))
+    );
+  } catch {
+    // ignore localStorage errors
+  }
+}
 
 function getOrCreateUserId() {
-  if (typeof window === "undefined") return "demo";
+  if (typeof window === "undefined") return "";
 
   const storageKey = "mychat_user_id_v2";
   const existing = window.localStorage.getItem(storageKey);
@@ -66,7 +110,7 @@ export default function RoleChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
-  const [userId, setUserId] = useState("demo");
+  const [userId, setUserId] = useState("");
   const [isHydrating, setIsHydrating] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -77,63 +121,31 @@ export default function RoleChatPage() {
 
   useEffect(() => {
     if (!roleId || !userId) return;
-
-    let cancelled = false;
-
-    async function loadHistory() {
-      setIsHydrating(true);
-
-      try {
-        const res = await fetch("/api/chat/history", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId,
-            roleId,
-          }),
-        });
-
-        if (!res.ok) {
-          throw new Error("History request failed");
-        }
-
-        const data = await res.json();
-        const history = Array.isArray(data?.messages) ? data.messages : [];
-
-        if (cancelled) return;
-
-        if (history.length > 0) {
-          setMessages(history);
-        } else {
-          setMessages([
-            {
-              role: "assistant",
-              content: getInitialMessage(roleId),
-            },
-          ]);
-        }
-      } catch {
-        if (cancelled) return;
-
-        setMessages([
-          {
-            role: "assistant",
-            content: getInitialMessage(roleId),
-          },
-        ]);
-      } finally {
-        if (!cancelled) {
-          setIsHydrating(false);
-        }
-      }
+  
+    setIsHydrating(true);
+  
+    const history = loadLocalHistory(roleId);
+  
+    if (history.length > 0) {
+      setMessages(history);
+    } else {
+      setMessages([
+        {
+          role: "assistant",
+          content: getInitialMessage(roleId),
+        },
+      ]);
     }
-
-    loadHistory();
-
-    return () => {
-      cancelled = true;
-    };
+  
+    setIsHydrating(false);
   }, [roleId, userId]);
+  useEffect(() => {
+    if (!roleId || !userId) return;
+    if (messages.length === 0) return;
+    if (isHydrating) return;
+  
+    saveLocalHistory(roleId, messages);
+  }, [roleId, userId, messages, isHydrating]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -141,7 +153,7 @@ export default function RoleChatPage() {
 
   async function handleSend() {
     const text = input.trim();
-    if (!text || !role || isThinking) return;
+    if (!text || !role || isThinking || !userId) return;
 
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setInput("");

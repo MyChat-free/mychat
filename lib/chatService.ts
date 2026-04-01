@@ -3,7 +3,6 @@ import { ROLES } from "@/lib/roles";
 import { PROMPTS } from "@/lib/prompts";
 import {
   appendToRoleHistory,
-  getCrossRoleContext,
   getRoleHistory,
 } from "@/lib/memoryStore";
 import OpenAI from "openai";
@@ -115,12 +114,6 @@ export async function chatReply(params: {
     roleId: params.roleId,
   });
 
-  const crossRoleContext = getCrossRoleContext({
-    userId: params.userId,
-    currentRoleId: params.roleId,
-    limit: 6,
-  });
-
   const promptId = (role as any)?.promptId as keyof typeof PROMPTS | undefined;
   const rolePrompt =
     promptId && PROMPTS[promptId] ? String(PROMPTS[promptId]).trim() : "";
@@ -140,26 +133,15 @@ export async function chatReply(params: {
     { role: "system", content: systemPrompt },
   ];
 
-  if (crossRoleContext) {
-    messages.push({
-      role: "system",
-      content:
-        "ВАЖНЫЙ КОНТЕКСТ О ПОЛЬЗОВАТЕЛЕ:\n" +
-      crossRoleContext +
-      "\n\nИНСТРУКЦИЯ:\n" +
-      "- Учитывай этот контекст при ответе\n" +
-      "- Если пользователь перегружен или устал — снизь нагрузку в ответе\n" +
-      "- Если есть несколько задач — помоги выбрать и упростить\n" +
-      "- Не игнорируй это, но и не цитируй дословно",
-    });
-  }
 
-  for (const m of roleHistory) {
-    messages.push({
-      role: m.role,
-      content: String(m.content ?? ""),
-    });
-  }
+  const recentHistory = roleHistory.slice(-10);
+
+   for (const m of recentHistory) {
+  messages.push({
+    role: m.role,
+    content: String(m.content ?? ""),
+  });
+}
 
   const providerOrder = getProviderOrder();
   const maxTokens = getMaxTokensByRole(params.roleId);
