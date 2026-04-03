@@ -210,6 +210,7 @@ export default function RoleChatPage() {
       style={{
         minHeight: "100dvh",
         background: "#fff",
+        color: "#111",
         fontFamily: "system-ui",
         display: "flex",
         flexDirection: "column",
@@ -221,6 +222,7 @@ export default function RoleChatPage() {
           top: 0,
           zIndex: 10,
           background: "#fff",
+          color: "#111",
           borderBottom: "1px solid #eee",
           padding: "14px 16px",
         }}
@@ -272,6 +274,7 @@ export default function RoleChatPage() {
                   borderRadius: 16,
                   border: "1px solid #e8e8e8",
                   background: isAssistant ? "#fafafa" : "#fff",
+                  color: "#111",
                   maxWidth: "88%",
                   marginLeft: isAssistant ? 0 : "auto",
                 }}
@@ -324,6 +327,7 @@ export default function RoleChatPage() {
               borderRadius: 16,
               border: "1px solid #e8e8e8",
               background: "#fafafa",
+              color: "#111",
               maxWidth: "88%",
             }}
           >
@@ -344,6 +348,7 @@ export default function RoleChatPage() {
           right: 0,
           bottom: 64,
           background: "#fff",
+          color: "#111",
           borderTop: "1px solid #eee",
           padding: 12,
         }}
@@ -365,6 +370,8 @@ export default function RoleChatPage() {
               padding: 12,
               borderRadius: 12,
               border: "1px solid #ddd",
+              background: "#fff",
+              color: "#111",
               fontSize: 16,
             }}
             onKeyDown={(e) => {
