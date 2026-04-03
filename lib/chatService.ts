@@ -43,10 +43,10 @@ function getProviderOrder(): readonly Provider[] {
 
 function getModel(provider: Provider) {
   if (provider === "openrouter") {
-    return process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
+    return process.env.OPENROUTER_MODEL || "openai/gpt-4o";
   }
 
-  return process.env.OPENAI_MODEL || "gpt-4o-mini";
+  return process.env.OPENAI_MODEL || "gpt-4o";
 }
 
 function buildDefaultSystemPrompt(title: string) {
