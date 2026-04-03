@@ -104,68 +104,6 @@ function trimIncompleteReply(text: string) {
   return clean;
 }
 
-function isTalkRole(roleId: string) {
-  return roleId === "talk";
-}
-
-function looksGenericTalkReply(text: string) {
-  const lower = text.toLowerCase();
-
-  const genericPatterns = [
-    "это нормально",
-    "многие сталкиваются",
-    "часто бывает",
-    "важно помнить",
-    "каждый опыт",
-    "конфликты могут",
-    "может быть очень тяжело",
-    "может быть очень непросто",
-    "ты не одинок",
-    "это действительно тяжело",
-    "понимаю, это действительно",
-  ];
-
-  return genericPatterns.some((pattern) => lower.includes(pattern));
-}
-
-async function rewriteTalkReplyIfGeneric(params: {
-  client: OpenAI;
-  model: string;
-  userMessage: string;
-  draftReply: string;
-}) {
-  const { client, model, userMessage, draftReply } = params;
-
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.6,
-    max_tokens: 180,
-    messages: [
-      {
-        role: "system",
-        content:
-          "Перепиши ответ для роли 'Поговорить'. " +
-          "Сделай его более живым, конкретным и человечным. " +
-          "Не обобщай. Не пиши фразы вроде 'это нормально', 'многие сталкиваются', 'часто бывает'. " +
-          "Не объясняй жизнь и не читай нотации. " +
-          "Не звучи как психолог, специалист или наставник. " +
-          "Говори как человек рядом. " +
-          "Нужна структура: 1) точное попадание в суть, 2) мягкая интерпретация, 3) один короткий вопрос. " +
-          "Коротко. Без markdown.",
-      },
-      {
-        role: "user",
-        content:
-          `Сообщение пользователя:\n${userMessage}\n\n` +
-          `Текущий черновик ответа:\n${draftReply}\n\n` +
-          "Перепиши лучше.",
-      },
-    ],
-  });
-
-  return completion.choices?.[0]?.message?.content?.trim() || draftReply;
-}
-
 export async function chatReply(params: {
   userId: string;
   roleId: string;
@@ -190,27 +128,14 @@ export async function chatReply(params: {
   const rolePrompt =
     promptId && PROMPTS[promptId] ? String(PROMPTS[promptId]).trim() : "";
 
-  const extraTalkStyle = isTalkRole(params.roleId)
-    ? "\n\nСТИЛЬ ДЛЯ РОЛИ 'Поговорить':\n" +
-      "- Не обобщай (не говори 'часто бывает', 'многие сталкиваются').\n" +
-      "- Не объясняй жизнь и не давай интерпретации сверху.\n" +
-      "- Говори как живой человек, а не как эксперт.\n" +
-      "- Не растягивай мысли — коротко и точно.\n" +
-      "- Лучше чуть недосказать, чем перегрузить.\n" +
-      "- Один фокус — одна мысль.\n"
-    : "";
-
-  const systemPrompt =
-    (rolePrompt || buildDefaultSystemPrompt(title)) +
-    "\n\nВАЖНО ДЛЯ ФОРМАТА ОТВЕТА:\n" +
-    "- Отвечай естественно и по делу.\n" +
-    "- Не пиши слишком длинно без необходимости.\n" +
-    "- Если уместно, учитывай состояние и контекст пользователя из прошлых диалогов.\n" +
-    "- Не цитируй прошлые сообщения дословно.\n" +
-    "- Не делай вид, что знаешь больше, чем есть в контексте.\n" +
-    "- Не используй markdown-разметку вроде ** и ###.\n" +
-    "- Не обрывай ответ на полуслове.\n" +
-    extraTalkStyle;
+    const systemPrompt =
+  (rolePrompt || buildDefaultSystemPrompt(title)) +
+  "\n\nВАЖНО:\n" +
+  "- Отвечай естественно и по делу.\n" +
+  "- Не пиши слишком длинно без необходимости.\n" +
+  "- Не цитируй прошлые сообщения дословно.\n" +
+  "- Не используй markdown-разметку вроде ** и ###.\n" +
+  "- Не обрывай ответ на полуслове.\n";
 
   const messages: Array<{ role: ChatRole | "system"; content: string }> = [
     { role: "system", content: systemPrompt },
@@ -238,7 +163,7 @@ export async function chatReply(params: {
       const completion = await client.chat.completions.create({
         model,
         messages,
-        temperature: params.roleId === "planner" ? 0.5 : 0.9,
+        temperature: params.roleId === "planner" ? 0.5 : 0.7,
         max_tokens: maxTokens,
         presence_penalty: 0.2,
         frequency_penalty: 0.2,
@@ -250,23 +175,7 @@ export async function chatReply(params: {
         reply = trimIncompleteReply(reply);
       }
 
-      if (isTalkRole(params.roleId) && looksGenericTalkReply(reply)) {
-        try {
-          reply = await rewriteTalkReplyIfGeneric({
-            client,
-            model,
-            userMessage: params.message,
-            draftReply: reply,
-          });
-        } catch (rewriteErr: any) {
-          console.error(
-            "[LLM:rewriteTalkReplyIfGeneric] failed:",
-            rewriteErr?.message || rewriteErr
-          );
-        }
-      }
-
-      appendToRoleHistory({
+          appendToRoleHistory({
         userId: params.userId,
         roleId: params.roleId,
         role: "assistant",
