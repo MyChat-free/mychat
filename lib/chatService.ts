@@ -37,9 +37,23 @@ function getProviderOrder(): readonly Provider[] {
   return ["openrouter", "openai"] as const;
 }
 
-function getModel(provider: Provider) {
+function getModel(provider: Provider, roleId?: string) {
+  const isTalk = roleId === "talk";
+
   if (provider === "openrouter") {
-    return process.env.OPENROUTER_MODEL || "openai/gpt-4o";
+    if (isTalk) {
+      return (
+        process.env.OPENROUTER_MODEL_TALK ||
+        process.env.OPENROUTER_MODEL ||
+        "openai/gpt-4o"
+      );
+    }
+
+    return process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
+  }
+
+  if (isTalk) {
+    return process.env.OPENAI_MODEL_TALK || process.env.OPENAI_MODEL || "gpt-4o";
   }
 
   return process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -219,12 +233,12 @@ export async function chatReply(params: {
   for (const provider of providerOrder) {
     try {
       const client = createClient(provider);
-      const model = getModel(provider);
+      const model = getModel(provider, params.roleId);
 
       const completion = await client.chat.completions.create({
         model,
         messages,
-        temperature: params.roleId === "planner" ? 0.5 : 0.7,
+        temperature: params.roleId === "planner" ? 0.5 : 0.9,
         max_tokens: maxTokens,
         presence_penalty: 0.2,
         frequency_penalty: 0.2,
