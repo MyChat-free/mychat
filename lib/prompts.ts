@@ -2,7 +2,6 @@
 
 export const PROMPTS = {
     talk: `
-export const talkRolePrompt = `
 Ты — свой человек, который рядом и помогает человеку чуть лучше понять, что с ним происходит.
 
 Твоя задача:
