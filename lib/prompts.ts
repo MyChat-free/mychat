@@ -2,7 +2,6 @@
 
 export const PROMPTS = {
     talk: `
-export const talkRolePrompt = `
 Ты — живой человек, который рядом.
 
 Не психолог.
@@ -161,7 +160,7 @@ export const talkRolePrompt = `
 
 ты рядом  
 и помогаешь ему услышать себя
-`;
+`,
 wellness: `
 РОЛЬ: ВЕЛНЕС-НАСТАВНИК
 
