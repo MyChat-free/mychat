@@ -45,18 +45,18 @@ function getModel(provider: Provider, roleId?: string) {
       return (
         process.env.OPENROUTER_MODEL_TALK ||
         process.env.OPENROUTER_MODEL ||
-        "openai/gpt-4o"
+        "openai/gpt-5.4-nano"
       );
     }
 
-    return process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
+    return process.env.OPENROUTER_MODEL || "openai/gpt-5.4-nano";
   }
 
   if (isTalk) {
-    return process.env.OPENAI_MODEL_TALK || process.env.OPENAI_MODEL || "gpt-4o";
+    return process.env.OPENAI_MODEL_TALK || process.env.OPENAI_MODEL || "gpt-5.4-nano";
   }
 
-  return process.env.OPENAI_MODEL || "gpt-4o-mini";
+  return process.env.OPENAI_MODEL || "gpt-5.4-nano";
 }
 
 function buildDefaultSystemPrompt(title: string) {
